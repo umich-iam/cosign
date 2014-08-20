@@ -155,7 +155,7 @@ main( int argc, char *argv[] )
         sl[ SL_TITLE ].sl_data = "Error: Server Error";
         sl[ SL_ERROR ].sl_data = "REMOTE_ADDR not set";
         tmpl = ERROR_HTML;
-        subfile( tmpl, sl, 0 );
+        subfile( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -163,7 +163,7 @@ main( int argc, char *argv[] )
         sl[ SL_TITLE ].sl_data = "Error: Server Error";
         sl[ SL_ERROR ].sl_data = "SCRIPT_NAME not set";
         tmpl = ERROR_HTML;
-        subfile( tmpl, sl, 0 );
+        subfile( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -171,7 +171,7 @@ main( int argc, char *argv[] )
 	sl[ SL_TITLE ].sl_data = "Error: Server Error";
         sl[ SL_ERROR ].sl_data = "REQUEST_METHOD not set";
 	tmpl = ERROR_HTML;
-	subfile( tmpl, sl, 0 );
+	subfile( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -196,7 +196,7 @@ main( int argc, char *argv[] )
 	}
 
 	sl[ SL_TITLE ].sl_data = "Logout Requested";
-	subfile ( tmpl, sl, 0 );
+	subfile ( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -204,7 +204,7 @@ main( int argc, char *argv[] )
         sl[ SL_TITLE ].sl_data = "Error: Server Error";
         sl[ SL_ERROR ].sl_data = "cgi_init failed";
         tmpl = ERROR_HTML;
-        subfile( tmpl, sl, 0 );
+        subfile( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -229,7 +229,7 @@ main( int argc, char *argv[] )
      */
     if ( cl[ CL_VERIFY ].cl_data == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Logout Requested (again?)";
-	subfile ( tmpl, sl, 0 );
+	subfile ( tmpl, sl, NULL, 0 );
 	exit( 0 );
     }
 
@@ -264,7 +264,7 @@ main( int argc, char *argv[] )
 		"authentication server.  Please quit your web browser "
 		"to complete logout.";
         tmpl = ERROR_HTML;
-        subfile( tmpl, sl, 0 );
+        subfile( tmpl, sl, NULL, 0 );
         exit( 0 );
     }
 
@@ -277,7 +277,7 @@ main( int argc, char *argv[] )
 		"the authentication server. Please quit your browser to "
 		"complete logout.";
         tmpl = ERROR_HTML;
-        subfile( tmpl, sl, 0 );
+        subfile( tmpl, sl, NULL, 0 );
         exit( 0 );
     }
 

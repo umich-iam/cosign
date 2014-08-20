@@ -3,4 +3,6 @@
  * All Rights Reserved.  See LICENSE.
  */
 
-int	execfactor( struct factorlist *, struct cgi_list *, char ** );
+struct uservarlist;
+
+int	execfactor( struct factorlist *, struct cgi_list *, char **, struct uservarlist ** );
