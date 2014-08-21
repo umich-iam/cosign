@@ -83,6 +83,7 @@ struct matchlist {
 
 #ifdef SQL_FRIEND
 #define MYSQLDBKEY	"mysqldb"
+#define MYSQLDBNAMEKEY	"mysqldbname"
 #define MYSQLUSERKEY	"mysqluser"
 #define MYSQLPASSWDKEY	"mysqlpasswd"
 #endif
