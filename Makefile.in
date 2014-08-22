@@ -30,7 +30,7 @@ clean:
 	    do (cd $$i; ${MAKE} ${MFLAGS} clean); \
 	done
 
-VERSION=3.2.0
+VERSION=3.2.1rc1
 DISTDIR=../cosign-${VERSION}
 
 test : everything
