@@ -251,7 +251,7 @@ commonName              = supplied
 emailAddress            = supplied
 
 [ req ]
-default_bits		= 1024
+default_bits		= 2048
 default_md		= sha1
 distinguished_name	= req_distinguished_name
 
@@ -319,6 +319,7 @@ clear_ca() {
     dirs="certs crl newcerts private"
     for d in ${dirs}; do
 	(cd "${d}"; find . -type f -print0 | xargs -0 rm -f 2>/dev/null)
+    (cd "${d}"; find . -type l -print0 | xargs -0 unlink 2>/dev/null)
 	(cd "${d}"; find . -type d -print0 | xargs -0 rmdir 2>/dev/null)
 	rmdir "${d}"
     done
