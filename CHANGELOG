@@ -1,4 +1,9 @@
-3.2.0rc2
+3.2.1rc1
+    filters: Apache 2.4.x support
+    cgi: Add frienddbname conf option
+    common: disable SSLv2 in the daemon and cgi
+
+3.2.0
 	build: Add "make test" to test build integrity.
 		Currently tests cosignd, cosign.cgi and logout cgi.
 	build: Add "make server" to build only weblogin server components.
@@ -8,8 +13,6 @@
 	common: incorporate fixes from cosign 3.1.4.
 	cgi: Check environment for alternate cosign.conf.
 		Added for make test.
-	
-3.2.0rc1
 	cgi: Add support for httponly cookies.
 	cgi: Add validuser() to allow limited non-alphanumeric usernames.
 	filters: Add support for httponly cookies.
