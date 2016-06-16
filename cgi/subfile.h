@@ -1,5 +1,3 @@
-struct uservarlist;
-
 struct subfile_list {
     char	sl_letter;
     int		sl_type;
