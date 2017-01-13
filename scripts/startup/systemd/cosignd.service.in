@@ -1,0 +1,11 @@
+[Unit]
+Description=Cosign web single sign-on daemon
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=@prefix@/sbin/cosignd
+User=cosign
+
+[Install]
+WantedBy=multi-user.target

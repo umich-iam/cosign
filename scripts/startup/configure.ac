@@ -11,6 +11,8 @@ AC_CONFIG_FILES([debian/cosignd
 		 debian/monster
 		 redhat/cosignd
 		 redhat/monster
+		 systemd/cosignd.service
+		 systemd/monster.service
 		 solaris10/cosign
 		 solaris10/cosign.xml])
 

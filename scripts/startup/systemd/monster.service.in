@@ -1,0 +1,11 @@
+[Unit]
+Description=Cosign web single sign-on cookie monster
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=@prefix@/sbin/monster
+User=cosign
+
+[Install]
+WantedBy=multi-user.target
