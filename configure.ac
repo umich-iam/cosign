@@ -133,9 +133,7 @@ AC_SUBST(FILTER_COMPILER_OPTS)
 AC_SUBST(UNIVERSAL_OPTOPTS)
 AC_SUBST(OPTOPTS)
 SET_NO_SASL
-AC_CONFIG_SUBDIRS(scripts/startup)
-AC_CONFIG_SUBDIRS(libsnet)
-AC_CONFIG_SUBDIRS(libcgi)
+AC_CONFIG_SUBDIRS([libcgi libsnet])
 
 AC_CONFIG_FILES([Makefile
                  version.c
@@ -145,5 +143,13 @@ AC_CONFIG_FILES([Makefile
                  daemon/Makefile
                  filters/common/cosignpaths.h
                  $FILTER_CONFIG_FILES])
+
+# Startup scripts
+AC_CONFIG_FILES([scripts/startup/debian/cosignd], [chmod +x scripts/startup/debian/cosignd])
+AC_CONFIG_FILES([scripts/startup/debian/monster], [chmod +x scripts/startup/debian/monster])
+AC_CONFIG_FILES([scripts/startup/redhat/cosignd], [chmod +x scripts/startup/redhat/cosignd])
+AC_CONFIG_FILES([scripts/startup/redhat/monster], [chmod +x scripts/startup/redhat/monster])
+AC_CONFIG_FILES([scripts/startup/solaris10/cosign scripts/startup/solaris10/cosign.xml], [chmod +x scripts/startup/solaris10/cosign])
+AC_CONFIG_FILES([scripts/startup/systemd/cosignd.service scripts/startup/systemd/monster.service])
 
 AC_OUTPUT
