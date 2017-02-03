@@ -27,6 +27,7 @@
 #include "subfile.h"
 #include "factor.h"
 #include "mkcookie.h"
+#include "uservar.h"
 
 #define SERVICE_MENU	"/services/"
 #define LOOPWINDOW      30 
@@ -34,6 +35,7 @@
 #define MAXCOOKIETIME	86400	 /* Valid life of session cookie: 24 hours */
 
 extern char	*cosign_version;
+extern char	*userfactorpath;
 extern char	*suffix;
 extern int	errno;
 extern struct factorlist	*factorlist;
@@ -50,7 +52,7 @@ int		krbtkts = 0;
 int		httponly_cookies = 0;
 SSL_CTX 	*ctx = NULL;
 
-char			*new_factors[ COSIGN_MAXFACTORS ];
+char			*nfactorv[ COSIGN_MAXFACTORS ];
 char			*script;
 struct userinfo		ui;
 struct subparams	sp;
@@ -96,7 +98,7 @@ static struct subfile_list sl[] = {
 };
 
     static void
-loop_checker( int time, int count, char *cookie )
+loop_checker( int time, int count, char *cookie, struct uservarlist *uv )
 {
     struct timeval	tv;
     char       		new_cookie[ 255 ];
@@ -104,7 +106,7 @@ loop_checker( int time, int count, char *cookie )
     if ( gettimeofday( &tv, NULL ) != 0 ) {
 	sl[ SL_TITLE ].sl_data = "Error: Loop Breaker";
 	sl[ SL_ERROR ].sl_data = "Please try again later.";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit( 0 );
     }
 
@@ -116,7 +118,7 @@ loop_checker( int time, int count, char *cookie )
 		"%s/%d/%d", cookie, time, count) >= sizeof( new_cookie )) {
 	    sl[ SL_TITLE ].sl_data = "Error: Loop Breaker";
 	    sl[ SL_ERROR ].sl_data = "Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	    exit( 0 );
 	}
 	printf( "Set-Cookie: %s; path=/; secure%s\n",
@@ -132,7 +134,7 @@ loop_checker( int time, int count, char *cookie )
 		"%s/%d/%d", cookie, time, count) >= sizeof( new_cookie )) {
 	    sl[ SL_TITLE ].sl_data = "Error: Loop Breaker";
 	    sl[ SL_ERROR ].sl_data = "Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	    exit( 0 );
 	}
 	printf( "Location: %s\n\n", loop_page );
@@ -145,7 +147,7 @@ loop_checker( int time, int count, char *cookie )
 	    "%s/%d/%d", cookie, time, count) >= sizeof( new_cookie )) {
 	sl[ SL_TITLE ].sl_data = "Error: Loop Breaker";
 	sl[ SL_ERROR ].sl_data = "Please try again later.";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit( 0 );
     }
     printf( "Set-Cookie: %s; path=/; secure%s\n",
@@ -200,28 +202,92 @@ kcgi_configure()
     }
 }
 
+/* XXX */
     static char *
 smash( char *av[] )
 {
-    static char	smashtext[ 1024 ];
-    int		i;
-    
-    if ( av[ 0 ] == NULL ) {
-	return( NULL );
+    char        *smashtext = NULL;
+    int         flens[ COSIGN_MAXFACTORS ] = { 0 };
+    int         i, len = 0;
+
+    if ( av == NULL || av[ 0 ] == NULL ) {
+        return( NULL );
     }
-    if ( strlen( av[ 0 ] ) + 1 > sizeof( smashtext )) {
-	return( NULL );
+
+    for ( i = 0; i < COSIGN_MAXFACTORS && av[ i ] != NULL; i++ ) {
+        flens[ i ] = strlen( av[ i ] );
+
+        /* +1 for "," separator or nul terminator */
+        len += flens[ i ] + 1;
     }
+
+    if (( smashtext = (char *)malloc( len )) == NULL ) {
+        perror( "malloc smashtext" );
+        return( NULL );
+    }
+
     strcpy( smashtext, av[ 0 ] );
-    for ( i = 1; av[ i ] != NULL; i++ ) {
-	if ( strlen( av[ i ] ) + 1 + 1 >
-		sizeof( smashtext ) - strlen( smashtext )) {
-	    return( NULL );
-	}
-	strcat( smashtext, "," );
-	strcat( smashtext, av[ i ] );
+    for ( i = 1, len = flens[ 0 ]; av[ i ] != NULL; i++ ) {
+        strcpy( smashtext + len, "," );
+        strcpy( smashtext + len + 1, av[ i ] );
+
+        len += flens[ i ] + 1;
     }
+
     return( smashtext );
+}
+
+    static char *
+doublesmash( char *v1[], char *v2[] )
+{
+    char	*mergev[ COSIGN_MAXFACTORS ] = { NULL };
+    int		i, j;
+
+    for ( i = 0; i < COSIGN_MAXFACTORS - 1; i++ ) {
+	mergev[ i ] = v1[ i ];
+    }
+
+    for ( j = 0; v2[ j ] != NULL; j++ ) {
+	for ( i = 0; i < COSIGN_MAXFACTORS - 1; i++ ) {
+	    if ( mergev[ i ] == NULL ) {
+		mergev[ i ] = v2[ j ];
+		mergev[ i + 1 ] = NULL;
+		break;
+	    }
+	    if ( strcmp( v2[ j ], mergev[ i ] ) == 0 ) {
+		break;
+	    }
+	}
+    }
+    return( smash( mergev ));
+}
+
+    static void
+unsmash( char *factors, char *factorv[] )
+{
+    char	*last, *p, *q;
+    int		i;
+
+    factorv[ 0 ] = NULL;
+    if ( factors == NULL ) {
+	return;
+    }
+    p = strdup( factors );
+    for ( q = strtok_r( p, ",", &last ); q != NULL;
+	    q = strtok_r( NULL, ",", &last )) {
+	for ( i = 0; i < COSIGN_MAXFACTORS - 1; i++ ) {
+	    if ( factorv[ i ] == NULL ) {
+		factorv[ i ] = strdup( q );
+		factorv[ i + 1 ] = NULL;
+		break;
+	    }
+	    if ( strcmp( factorv[ i ], q ) == 0 ) {
+		break;
+	    }
+	}
+    }
+    free( p );
+    return;
 }
 
     static int
@@ -249,6 +315,27 @@ match_factor( char *required, char *satisfied, char *suffix )
 }
 
     static int
+satisfied( char	*sv[], char *rv[] )
+{
+    int		i, j;
+
+    for ( i = 0; rv[ i ] != NULL; i++ ) {
+	for ( j = 0; sv[ j ] != NULL; j++ ) {
+	    if ( match_factor( rv[ i ], sv[ j ], suffix )) {
+		break;
+	    }
+	}
+	if ( sv[ j ] == NULL ) {
+	    break;
+	}
+    }
+    if ( rv[ i ] != NULL ) {
+	return( 0 );
+    }
+    return( 1 );
+}
+
+    static int
 mkscookie( char *service_name, char *new_scookie, int len )
 {
     char			tmp[ 128 ];
@@ -265,20 +352,42 @@ mkscookie( char *service_name, char *new_scookie, int len )
     return( 0 );
 }
 
+    static char *
+getuserfactors( char *path, char *login, struct uservarlist **uv )
+{
+    struct factorlist		ufl;
+    char			*msg = NULL;
+    int				rc;
+
+    if ( path == NULL ) {
+      return NULL;
+    }
+
+    ufl.fl_path = path;
+    ufl.fl_flag = 0;
+    ufl.fl_formfield[ 0 ] = NULL;
+    ufl.fl_next = NULL;
+
+    if ((( rc = execfactor( &ufl, NULL, login, &msg, uv )) == COSIGN_CGI_OK ) &&
+	    msg != NULL ) {
+	return( msg );
+    }
+    return( NULL );
+}
+
     int
 main( int argc, char *argv[] )
 {
     int				rc = 0, cookietime = 0, cookiecount = 0;
     int				rebasic = 0, len, server_port;
     int				reauth = 0, scheme = 2;
-    int				i, j;
+    int				i;
     char                	new_cookiebuf[ 128 ];
     char        		new_cookie[ 255 ];
     char			new_scookie[ 255 ];
     char			*data, *ip_addr, *tmpl = NULL, *server_name;
     char			*cookie = NULL, *method, *qs;
-    char			*misc = NULL, *factor = NULL, *p, *r;
-    char			*require, *reqp;
+    char			*misc = NULL, *p;
     char			*ref = NULL, *service = NULL, *login = NULL;
     char			*remote_user = NULL;
     char			*subject_dn = NULL, *issuer_dn = NULL;
@@ -286,6 +395,9 @@ main( int argc, char *argv[] )
     char			*realm = NULL, *krbtkt_path = NULL;
     char			*auth_type = NULL;
     char			**ff, *msg = NULL;
+    char			*rfactors = NULL, *ufactors = NULL;
+    char			*rfactorv[ COSIGN_MAXFACTORS ] = { NULL };
+    char			*ufactorv[ COSIGN_MAXFACTORS ] = { NULL };
     struct servicelist		*scookie = NULL;
     struct factorlist		*fl;
     struct timeval		tv;
@@ -294,14 +406,20 @@ main( int argc, char *argv[] )
     regmatch_t			matches[ 2 ];
     int				nmatch = 2;
     CGIHANDLE			*cgi;
+    struct uservarlist		*uv = NULL;
 
     if ( argc == 2 ) {
 	if ( strcmp( argv[ 1 ], "-V" ) == 0 ) {
 	    printf( "%s\n", cosign_version );
 	    exit( 0 );
-	} else if ( strncmp( argv[ 1 ], "basic", 5 ) == 0 ) {
-	    rebasic = 1;
 	}
+
+	/*
+	 * the second argument is otherwise the query string per RFC 3875:
+	 *	http://tools.ietf.org/html/rfc3875#section-4.4
+	 *
+	 * just ignore it and use the QUERY_STRING env variable.
+	 */
     } else if ( argc != 1 ) {
 	fprintf( stderr, "usage: %s [-V]\n", argv[ 0 ] );
 	exit( 1 );
@@ -324,31 +442,31 @@ main( int argc, char *argv[] )
     if (( script = getenv( "SCRIPT_NAME" )) == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Unable to retrieve the script name";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit( 0 );
     }
     if (( method = getenv( "REQUEST_METHOD" )) == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Unable to retrieve method";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit(0);
     }
     if (( ip_addr = getenv( "REMOTE_ADDR" )) == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Unable to retrieve IP address";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit(0);
     }
     if (( server_name = getenv( "SERVER_NAME" )) == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Unable to retrieve server name";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit(0);
     }
     if (( sport = getenv( "SERVER_PORT" )) == NULL ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Unable to retrieve server port";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit(0);
     }
     server_port = atoi( sport);
@@ -361,7 +479,7 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: X509 failed";
 	    sl[ SL_ERROR ].sl_data = "There was an x.509 mutual authentication"
 		    " configuration error. Contact your administrator.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	    exit( 0 );
 	}
 	remote_user = login;
@@ -369,18 +487,22 @@ main( int argc, char *argv[] )
 	auth_type = getenv("AUTH_TYPE");
 	remote_user = getenv("REMOTE_USER");
 
+	if ( remote_user ) {
+	    if (( realm = getenv( "COSIGN_DEFAULT_FACTOR" )) == NULL ) {
+		realm = "basic";
+	    }
+	}
+
 	if ( remote_user && auth_type &&
 		strcasecmp( auth_type, "Negotiate" ) == 0 ) {
 	    if ( negotiate_translate( remote_user, &login, &realm ) != 0 ) {
 		sl[ SL_TITLE ].sl_data = "Error: Negotiate login failed";
 	 	sl[ SL_ERROR ].sl_data = "There was a problem processing your"
 			" authentication data. Contact your administrator";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 		exit ( 0 );
 	    }
 	    remote_user = login;
-	} else {
-	    realm = "basic";
 	}
     }
 
@@ -398,7 +520,7 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Unrecognized Service";
 	    sl[ SL_ERROR ].sl_data = "Unable to determine referring "
 		    "service from query string.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 400 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 400 );
 	    exit( 0 );
 	}
 
@@ -407,16 +529,9 @@ main( int argc, char *argv[] )
 	    p = strtok( NULL, "&" );
 	}
 
+	// comma separated list of required factors
 	if ( p != NULL && strncmp( p, "factors=", 8 ) == 0 ) {
-	    if (( factor = strchr( p, '=' )) == NULL ) {
-		sl[ SL_TITLE ].sl_data = "Error: malformatted factors";
-		sl[ SL_ERROR ].sl_data = "Unable to determine required "
-			"factors from query string.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 400 );
-		exit( 0 );
-	    }
-	    factor++;
-	    sl[ SL_RFACTOR ].sl_data = factor;
+	    rfactors = sl[ SL_RFACTOR ].sl_data = p + 8;
 	    p = strtok( NULL, "&" );
 	}
 
@@ -429,16 +544,20 @@ main( int argc, char *argv[] )
 	    if ( strncmp( service, "cosign-", 7 ) != 0 ) {
 		sl[ SL_TITLE ].sl_data = "Error: Unrecognized Service";
 		sl[ SL_ERROR ].sl_data = "Bad service in query string.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 400 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 400 );
 		exit( 0 );
 	    }
 	    sl[ SL_SERVICE ].sl_data = service;
 
+	    /*
+	     * Everything after the service to the end of the query string
+	     * is the ref.
+	     */
 	    if (( ref = strtok( NULL, "" )) == NULL ) {
 		sl[ SL_TITLE ].sl_data = "Error: malformatted referrer";
 		sl[ SL_ERROR ].sl_data = "Unable to determine referring "
 			"service from query string.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 400 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 400 );
 		exit( 0 );
 	    }
 	    sl[ SL_REF ].sl_data = ref;
@@ -446,6 +565,10 @@ main( int argc, char *argv[] )
     }
 
     if (( data = getenv( "HTTP_COOKIE" )) != NULL ) {
+	/* try to use a copy, so external factors get unmodified env value */
+	if (( p = strdup( data )) != NULL ) {
+	    data = p;
+	}
 	for ( cookie = strtok( data, ";" ); cookie != NULL;
 		cookie = strtok( NULL, ";" )) {
 	    while ( *cookie == ' ' ) ++cookie;
@@ -460,7 +583,7 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Cookies Required";
 	    sl[ SL_ERROR ].sl_data = "This service requires that "
 		    "cookies be enabled.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 400 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 400 );
 	    exit( 0 );
 	}
 	goto loginscreen;
@@ -478,7 +601,7 @@ main( int argc, char *argv[] )
 	if ( gettimeofday( &tv, NULL ) != 0 ) {
 	    sl[ SL_TITLE ].sl_data = "Error: Login Screen";
 	    sl[ SL_ERROR ].sl_data = "Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	    exit( 0 );
 	}
 
@@ -498,7 +621,7 @@ main( int argc, char *argv[] )
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "We were unable to contact the "
 		"authentication server.  Please try again later.";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit( 0 );
     }
 
@@ -509,7 +632,7 @@ main( int argc, char *argv[] )
 	sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 	sl[ SL_ERROR ].sl_data = "Failed to initialise connections "
 		"to the authentication server. Please try again later";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	exit( 0 );
     }
 
@@ -522,7 +645,7 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Please try later";
 	    sl[ SL_ERROR ].sl_data = "We were unable to contact the "
 		    "authentication server. Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 	    exit( 0 );
 	}
 
@@ -540,9 +663,9 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
-		exit( 0 );
-	    }
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
+	    exit( 0 );
+	}
 
 	if ( match_substitute( scookie->sl_wkurl, sizeof( matchbuf ),
 		matchbuf, nmatch, matches, service ) != 0 ) {
@@ -551,7 +674,7 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	    exit( 0 );
 	}
 
@@ -560,45 +683,42 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	    exit( 0 );
-	}
-
-	if ( !rebasic ) {
-	    if ( scookie->sl_flag & SL_REAUTH ) {
-		if ( cosign_check( head, cookie, &ui ) != 0 ) {
-		    goto loginscreen;
-		}
-		goto loginscreen;
-	    }
 	}
 
 	if ( cosign_check( head, cookie, &ui ) != 0 ) {
 	    goto loginscreen;
 	}
 
+	/* try to provide service name to external factors */
+	setenv( "COSIGN_SERVICE", service, 1 );
+
+	ufactors = getuserfactors( userfactorpath, ui.ui_login, &uv );
+
+	if ( !rebasic ) {
+	    if ( scookie->sl_flag & SL_REAUTH ) {
+		fprintf( stderr, "reauth required for %s\n", service );
+		/* ui struct populated by cosign_check above if good cookie */
+		goto loginscreen;
+	    }
+	}
+
 	if ( strcmp( ui.ui_ipaddr, ip_addr ) != 0 ) {
 	    goto loginscreen;
 	}
 
-	if ( factor != NULL ) {
-	    require = strdup( factor );
-	    for ( r = strtok_r( require, ",", &reqp ); r != NULL;
-		    r = strtok_r( NULL, ",", &reqp )) {
-		for ( i = 0; ui.ui_factors[ i ] != NULL; i++ ) {
-		    if ( match_factor( r, ui.ui_factors[ i ], suffix )) {
-			break;
-		    }
-		}
-		if ( ui.ui_factors[ i ] == NULL ) {
-		    break;
-		}
-	    }
-	    if ( r != NULL ) {
-		sl[ SL_ERROR ].sl_data = "Additional authentication"
-			" is required.";
-		goto loginscreen;
-	    }
+	/*
+	 * We don't decide exactly what factors to put in SL_RFACTOR until
+	 * just before returning the login page, so it's A-OK to handle user
+	 * and required factors separately.
+	 */
+	unsmash( ufactors, ufactorv );
+	unsmash( rfactors, rfactorv );
+	if ( !satisfied( ui.ui_factors, ufactorv ) ||
+		!satisfied( ui.ui_factors, rfactorv )) {
+	    sl[ SL_ERROR ].sl_data = "Additional authentication is required.";
+	    goto loginscreen;
 	}
 
 	if ( scheme == 3 ) {
@@ -609,7 +729,7 @@ main( int argc, char *argv[] )
 		sl[ SL_TITLE ].sl_data = "Error: Make Service Cookie Failed";
 		sl[ SL_ERROR ].sl_data = "We were unable to create a service "
 		    "cookie. Please try again later.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 		exit( 0 );
 	    }
 	    service = new_scookie;
@@ -620,10 +740,10 @@ main( int argc, char *argv[] )
 	    sl[ SL_TITLE ].sl_data = "Error: Register Failed";
 	    sl[ SL_ERROR ].sl_data = "We were unable to contact "
 		    "the authentication server.  Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	}
 
-	loop_checker( cookietime, cookiecount, cookie );
+	loop_checker( cookietime, cookiecount, cookie, uv );
 
 	if ( scheme == 3 ) {
 	    printf( "Location: %s?%s&%s\n\n", matchbuf, service, ref );
@@ -635,16 +755,17 @@ main( int argc, char *argv[] )
 
     if ( strcmp( method, "POST" ) != 0 ) {
 	if ( cosign_check( head, cookie, &ui ) != 0 ) {
-	    if ( rebasic && cosign_login( head, cookie, ip_addr, remote_user,
+	    if ( !rebasic ) {
+		goto loginscreen;
+	    }
+	    if ( cosign_login( head, cookie, ip_addr, remote_user,
 			realm, krbtkt_path ) < 0 ) {
 		fprintf( stderr, "cosign_login: basic login failed\n" ) ;
 		sl[ SL_TITLE ].sl_data = "Error: Please try later";
 		sl[ SL_ERROR ].sl_data = "We were unable to contact the "
 			"authentication server. Please try again later.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 		exit( 0 );
-	    } else if ( !rebasic ) {
-		goto loginscreen;
 	    }
 	}
 
@@ -664,7 +785,7 @@ main( int argc, char *argv[] )
     if (( cgi = cgi_init()) == NULL ) {
         sl[ SL_TITLE ].sl_data = "Error: Server Error";
         sl[ SL_ERROR ].sl_data = "cgi_init failed";
-        subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+        subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
         exit( 0 );
     }  
 
@@ -684,7 +805,7 @@ main( int argc, char *argv[] )
 	    if ( cl[ i ].cl_key == NULL ) {
 		sl[ SL_TITLE ].sl_data = "Error: Server Configuration";
 		sl[ SL_ERROR ].sl_data = "Too many form fields configured.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 		exit( 0 );
 	    }
 	}
@@ -693,7 +814,7 @@ main( int argc, char *argv[] )
     if ( cgi_post( cgi, cl ) != 0 ) {
 	sl[ SL_TITLE ].sl_data = "Error: Server POST Error";
 	sl[ SL_ERROR ].sl_data = "Please try again later";
-	subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+	subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 
 	exit( 0 );
     }
@@ -706,15 +827,19 @@ main( int argc, char *argv[] )
 		sl[ SL_SERVICE ].sl_data = cl[ CL_SERVICE ].cl_data;
     }
     if ( cl[ CL_RFACTOR ].cl_data != NULL ) {
-	factor = sp.sp_factor =
+	rfactors = sp.sp_factor =
 		sl[ SL_RFACTOR ].sl_data = cl[ CL_RFACTOR ].cl_data;
     }
     if (( cl[ CL_REAUTH ].cl_data != NULL ) && 
 	    ( strcmp( cl[ CL_REAUTH ].cl_data, "true" ) == 0 )) {
-	sp.sp_reauth = reauth = 1;
+	reauth = sp.sp_reauth = 1;
     }
 
     if ( cosign_check( head, cookie, &ui ) == 0 ) {
+	/*
+	 * We're setting CL_LOGIN because we pass cl (not login) to
+	 * the external factors.
+	 */
 	login = cl[ CL_LOGIN ].cl_data = ui.ui_login;
     } else {
 	if ( cl[ CL_LOGIN ].cl_data == NULL ) {
@@ -727,6 +852,30 @@ main( int argc, char *argv[] )
     if ( strcmp( ui.ui_ipaddr, ip_addr ) != 0 ) {
 	sp.sp_ipchanged = 1;
     }
+
+    if ( service != NULL ) {
+        if (( p = strchr( service, '=' )) == NULL ) {
+            scheme = 3;
+            scookie = service_find( service, matches, nmatch );
+        } else {
+            *p = '\0';
+            scookie = service_find( service, matches, nmatch );
+            *p = '=';
+        }
+
+        if ( scookie == NULL ) {
+            fprintf( stderr, "no matching service for %s\n", service );
+            sl[ SL_TITLE ].sl_data = "Error: Unknown service";
+            sl[ SL_ERROR ].sl_data = "We were unable to locate a "
+                "service matching the one provided.";
+            subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
+            exit( 0 );
+          }
+
+        setenv( "COSIGN_SERVICE", service, 1 );
+    }
+
+    nfactorv[ 0 ] = NULL;
 
 #if defined( SQL_FRIEND ) || defined( KRB ) || defined( HAVE_LIBPAM )
     if ( cl[ CL_PASSWORD ].cl_data != NULL ) {
@@ -743,7 +892,7 @@ main( int argc, char *argv[] )
             if ( strcmp( type, "mysql" ) == 0 ) {
 	        if (( rc = cosign_login_mysql( head, login, username, realm, 
 					cl[ CL_PASSWORD ].cl_data, ip_addr,
-					cookie, &sp, &msg )) == COSIGN_CGI_OK) {
+					cookie, &sp, &msg, uv )) == COSIGN_CGI_OK) {
 		    goto loggedin;
 	        }
 	    } else
@@ -752,7 +901,7 @@ main( int argc, char *argv[] )
             if ( strcmp( type, "kerberos" ) == 0 ) {
 	        if (( rc = cosign_login_krb5( head, login, username, realm, 
 				        cl[ CL_PASSWORD ].cl_data, ip_addr,
-					cookie, &sp, &msg )) == COSIGN_CGI_OK) {
+					cookie, &sp, &msg, uv )) == COSIGN_CGI_OK) {
 		    goto loggedin;
                 }
 	    } else
@@ -761,7 +910,7 @@ main( int argc, char *argv[] )
 	    if ( strcmp( type, "pam" ) == 0 ) {
 		if (( rc = cosign_login_pam( head, login, username, realm,
 					cl[ CL_PASSWORD ].cl_data, ip_addr,
-					cookie, &sp, &msg )) == COSIGN_CGI_OK) {
+					cookie, &sp, &msg, uv )) == COSIGN_CGI_OK) {
 		    goto loggedin;
 		}
 	    } else
@@ -775,7 +924,7 @@ main( int argc, char *argv[] )
 	if ( rc == COSIGN_CGI_PASSWORD_EXPIRED ) {
 	    sl[ SL_TITLE ].sl_data = "Password Expired";
 	    sl[ SL_ERROR ].sl_data = msg;
-            subfile( EXPIRED_ERROR_HTML, sl, 0 );
+            subfile( EXPIRED_ERROR_HTML, sl, uv, 0 );
             exit( 0 ); 
         }
 
@@ -818,11 +967,17 @@ loggedin:
 		    " before secondary authentication.";
 	    goto loginscreen;
 	}
-	if (( rc = execfactor( fl, cl, &msg )) != COSIGN_CGI_OK ) {
+
+	if ( uv ) {
+	    uservar_dispose( uv );
+	    uv = NULL;
+	}
+
+	if (( rc = execfactor( fl, cl, NULL, &msg, &uv )) != COSIGN_CGI_OK ) {
 	    sl[ SL_ERROR ].sl_data = msg;
             if ( rc == COSIGN_CGI_PASSWORD_EXPIRED ) {
 	        sl[ SL_TITLE ].sl_data = "Password Expired";
-                subfile( EXPIRED_ERROR_HTML, sl, 0 );
+                subfile( EXPIRED_ERROR_HTML, sl, uv, 0 );
                 exit( 0 );
             } else {
 	        sl[ SL_TITLE ].sl_data = "Authentication Required";
@@ -830,13 +985,17 @@ loggedin:
 	    continue;
 	}
 
+	if ( msg == NULL || *msg == '\0' ) {
+	    continue;
+	}
+
 	for ( i = 0; i < COSIGN_MAXFACTORS - 1; i++ ) {
-	    if ( new_factors[ i ] == NULL ) {
-		new_factors[ i ] = strdup( msg );
-		new_factors[ i + 1 ] = NULL;
+	    if ( nfactorv[ i ] == NULL ) {
+		nfactorv[ i ] = strdup( msg );
+		nfactorv[ i + 1 ] = NULL;
 		break;
 	    }
-	    if ( strcmp( new_factors[ i ], msg ) == 0 ) {
+	    if ( strcmp( nfactorv[ i ], msg ) == 0 ) {
 		break;
 	    }
 	}
@@ -856,7 +1015,7 @@ loggedin:
 		sl[ SL_TITLE ].sl_data = "Error: Please try later";
 		sl[ SL_ERROR ].sl_data = "We were unable to contact the "
 			"authentication server. Please try again later.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_ERROR, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_ERROR, 500 );
 		exit( 0 );
 	    }
 
@@ -870,22 +1029,36 @@ loggedin:
 	goto loginscreen;
     }
 
-    if ( service ) {
-	if (( p = strchr( service, '=' )) == NULL ) {
-	    scheme = 3;
-	    scookie = service_find( service, matches, nmatch );
-	} else {
-	    /* legacy cosign scheme */
-	    *p = '\0';
-	    scookie = service_find( service, matches, nmatch );
-	    *p = '=';
+    ufactors = getuserfactors( userfactorpath, ui.ui_login, &uv );
+
+    unsmash( ufactors, ufactorv );
+    unsmash( rfactors, rfactorv );
+    if ( !satisfied( ui.ui_factors, ufactorv )) {
+	sl[ SL_ERROR ].sl_data = "Additional authentication is required.";
+	goto loginscreen_moreauth;
+    } else if ( !satisfied( ui.ui_factors, rfactorv )) {
+	sl[ SL_ERROR ].sl_data = "Additional authentication is required.";
+	goto loginscreen;
+    }
+
+    if ( service != NULL && ref != NULL ) {
+	if ( scookie == NULL ) {
+	    if (( p = strchr( service, '=' )) == NULL ) {
+		scheme = 3;
+		scookie = service_find( service, matches, nmatch );
+	    } else {
+		/* legacy cosign scheme */
+		*p = '\0';
+		scookie = service_find( service, matches, nmatch );
+		*p = '=';
+	    }
 	}
 	if ( scookie == NULL ) {
 	    fprintf( stderr, "no matching service for %s\n", service );
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 		exit( 0 );
 	    }
 
@@ -896,7 +1069,7 @@ loggedin:
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	    exit( 0 );
 	}
 
@@ -905,7 +1078,7 @@ loggedin:
 	    sl[ SL_TITLE ].sl_data = "Error: Unknown service";
 	    sl[ SL_ERROR ].sl_data = "We were unable to locate a "
 		    "service matching the one provided.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	    exit( 0 );
 	}
 
@@ -914,18 +1087,16 @@ loggedin:
 	 * required factors have been just satisfied.
 	 */
 	if ( scookie->sl_flag & SL_REAUTH ) {
-	    for ( i = 0; scookie->sl_factors[ i ] != NULL; i++ ) {
-		for ( j = 0; new_factors[ j ] != NULL; j++ ) {
-		    if ( match_factor( scookie->sl_factors[ i ],
-			    new_factors[ j ], suffix )) {
-			break;
-		    }
-		}
-		if ( new_factors[ j ] == NULL ) {
-		    sl[ SL_ERROR ].sl_data = "Please complete"
-			    " all required fields to re-authenticate.";
+	    if ( scookie->sl_factors[ 0 ] == NULL &&
+		    nfactorv[ 0 ] == NULL ) {
+		sl[ SL_ERROR ].sl_data = "Please complete any field"
+			" to re-authenticate.";
+		goto loginscreen;
+	    }
+	    if ( !satisfied( nfactorv, scookie->sl_factors )) {
+		sl[ SL_ERROR ].sl_data = "Please complete all required"
+			" fields to re-authenticate.";
 		    goto loginscreen;
-		}
 	    }
 	}
 
@@ -941,7 +1112,7 @@ loggedin:
 		sl[ SL_TITLE ].sl_data = "Error: Make Service Cookie Failed";
 		sl[ SL_ERROR ].sl_data = "We were unable to create a service "
 		    "cookie. Please try again later.";
-		subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+		subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 		exit( 0 );
 	    }
 	    service = new_scookie;
@@ -952,19 +1123,18 @@ loggedin:
             sl[ SL_TITLE ].sl_data = "Error: Implicit Register Failed";
             sl[ SL_ERROR ].sl_data = "We were unable to contact the "
 		    "authentication server.  Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
             exit( 0 );
         }
-    }
 
-    loop_checker( cookietime, cookiecount, cookie );
+	loop_checker( cookietime, cookiecount, cookie, uv );
 
-    if (( ref != NULL ) && ( ref = strstr( ref, "http" )) != NULL ) {
 	if ( scheme == 3 ) {
 	    printf( "Location: %s?%s&%s\n\n", matchbuf, service, ref );
 	} else {
 	    printf( "Location: %s\n\n", ref );
 	}
+
 	exit( 0 );
     }
 
@@ -991,7 +1161,7 @@ loginscreen:
 			script, strerror( errno ));
 	    sl[ SL_TITLE ].sl_data = "Error: Login Screen";
 	    sl[ SL_ERROR ].sl_data = "Please try again later.";
-	    subfile( ERROR_HTML, sl, SUBF_OPT_SETSTATUS, 500 );
+	    subfile( ERROR_HTML, sl, uv, SUBF_OPT_SETSTATUS, 500 );
 	    exit( 0 );
 	}
 	snprintf( new_cookie, sizeof( new_cookie ), "cosign=%s/%lu",
@@ -1022,15 +1192,28 @@ loginscreen:
 		scookie = service_find( service, matches, nmatch );
 	    } else {
 		/* legacy cosign scheme */
-	    *p = '\0';
+		*p = '\0';
 		scookie = service_find( service, matches, nmatch );
-	    *p = '=';
-	}
+		*p = '=';
+	    }
 	}
 
 	if (( scookie != NULL ) && ( scookie->sl_flag & SL_REAUTH )) {
+
 	    sl[ SL_DFACTOR ].sl_data = NULL;
-	    sl[ SL_RFACTOR ].sl_data = smash( scookie->sl_factors );
+	    if ( scookie->sl_factors[ 0 ] != NULL ) {
+		/*
+		 * XXX
+		 * ufactors and rfactors that haven't yet been satisfied,
+		 * but aren't in sl_factors still ought to be in SL_RFACTOR.
+		 */
+		sl[ SL_RFACTOR ].sl_data = smash( scookie->sl_factors );
+	    } else {
+		/*
+		 * Might be better to let the user pick a factor.
+		 */
+		sl[ SL_RFACTOR ].sl_data = ui.ui_factors[ 0 ];
+	    }
 	    sl[ SL_TITLE ].sl_data = "Re-Authentication Required";
 	    if ( sl[ SL_ERROR ].sl_data == NULL ) {
 		sl[ SL_ERROR ].sl_data = "Please Re-Authenticate.";
@@ -1046,12 +1229,20 @@ loginscreen:
 	    }
 	    tmpl = REAUTH_HTML;
 	} else {
+loginscreen_moreauth:
+	    /*
+	     * XXX
+	     * For the sake of the user interface, we'd like SL_RFACTORS to
+	     * contain ufactors and rfactors.
+	     */
 	    sl[ SL_DFACTOR ].sl_data = smash( ui.ui_factors );
-	    sl[ SL_RFACTOR ].sl_data = factor;
+
+	    unsmash( rfactors, rfactorv );
+	    sl[ SL_RFACTOR ].sl_data = doublesmash( rfactorv, ufactorv );
 	    tmpl = LOGIN_ERROR_HTML;
 	}
     }
 
-    subfile( tmpl, sl, SUBF_OPT_NOCACHE );
+    subfile( tmpl, sl, uv, SUBF_OPT_NOCACHE );
     exit( 0 );
 }
