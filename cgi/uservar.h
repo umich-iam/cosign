@@ -1,4 +1,4 @@
-struct uservarlist { 
+struct uservarlist {
     char                *uv_var;
     char                *uv_value;
     struct uservarlist  *uv_next;
