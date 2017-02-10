@@ -3,8 +3,8 @@ Description=Cosign web single sign-on cookie monster
 After=network.target
 
 [Service]
-Type=forking
-ExecStart=@prefix@/sbin/monster
+Type=simple
+ExecStart=@prefix@/sbin/monster -f
 User=cosign
 
 [Install]

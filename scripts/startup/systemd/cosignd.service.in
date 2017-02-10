@@ -3,8 +3,8 @@ Description=Cosign web single sign-on daemon
 After=network.target
 
 [Service]
-Type=forking
-ExecStart=@prefix@/sbin/cosignd
+Type=simple
+ExecStart=@prefix@/sbin/cosignd -f
 User=cosign
 
 [Install]
