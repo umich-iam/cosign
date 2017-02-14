@@ -20,9 +20,52 @@
 
 #include "conf.h"
 #include "factor.h"
+#include "uservar.h"
+
+extern int	httponly_cookies;
+
+static void
+adduservar( struct uservarlist **uv, char *line )
+{
+    char		*equalspos;
+    char		*valuepos;
+    char		savechr;
+    struct uservarlist	*new_uv;
+
+    equalspos = strchr( line, '=' );
+    if ( equalspos == NULL ) {
+    /* Didn't find the equals. */
+    return;
+    }
+
+    new_uv = uservar_new();
+    if ( new_uv == NULL ) {
+    perror( "adduservar" );
+    return;
+    }
+
+    valuepos = equalspos + 1;
+    savechr = *equalspos;
+    *equalspos = '\0';
+
+    if ( strlen( &line[1] ) == 0 ) {
+    fprintf( stderr, "Variable is of length zero? Skipping.\n" );
+    *equalspos = savechr;
+    return;
+    }
+
+    new_uv->uv_var = strdup( &line[1] ); /* Skip the leading '$' */
+    new_uv->uv_value = strdup( valuepos );
+    new_uv->uv_next = *uv;
+
+    *equalspos = savechr;
+
+    *uv = new_uv;
+}
 
     int
-execfactor( struct factorlist *fl, struct cgi_list cl[], char **msg )
+execfactor( struct factorlist *fl, struct cgi_list cl[], char *login,
+	char **msg, struct uservarlist **uv )
 {
     int			fd0[ 2 ], fd1[ 2 ], i, status;
     pid_t		pid;
@@ -32,6 +75,8 @@ execfactor( struct factorlist *fl, struct cgi_list cl[], char **msg )
     static char		prev[ 1024 ];
 
     *msg = NULL;
+    memset( prev, 0, sizeof( prev ));
+    *uv = NULL;
 
     if ( pipe( fd0 ) < 0 || pipe( fd1 ) < 0 ) {
 	perror( "pipe" );
@@ -57,7 +102,7 @@ execfactor( struct factorlist *fl, struct cgi_list cl[], char **msg )
 	    perror( "close" );
 	    exit( 1 );
 	}
-	execl( fl->fl_path, fl->fl_path, NULL );
+	execl( fl->fl_path, fl->fl_path, login, NULL );
 	perror( fl->fl_path );
 	exit( 1 );
 
@@ -85,16 +130,26 @@ execfactor( struct factorlist *fl, struct cgi_list cl[], char **msg )
 	    }
 	}
     }
+
     if ( snet_close( sn_w ) != 0 ) {
 	perror( "snet_close" );
 	exit( 1 );
     }
 
-    tv.tv_sec = 10;
+    tv.tv_sec = 60;
     tv.tv_usec = 0;
     while (( line = snet_getline( sn_r, &tv )) != NULL ) {
-	strncpy( prev, line, sizeof( prev ));
-	prev[ sizeof( prev ) - 1 ] = '\0';
+	if ( strchr( line, '=' ) == NULL ) {
+	    strncpy( prev, line, sizeof( prev ));
+	    prev[ sizeof( prev ) - 1 ] = '\0';
+	} else {
+	    if ( *line == '$' ) {
+		adduservar( uv, line );
+	    } else {
+		printf( "Set-Cookie: %s; path=/; secure%s\n",
+			line, httponly_cookies ? "; httponly" : "" );
+	    }
+	}
     }
     if ( errno == ETIMEDOUT ) {
 	kill( pid, SIGKILL );

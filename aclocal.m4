@@ -5,7 +5,7 @@ AC_DEFUN([CHECK_SSL],
         /usr/local/ssl /usr/lib/ssl /usr/ssl \
         /usr/pkg /usr/local /usr"
     AC_ARG_WITH(ssl,
-        AC_HELP_STRING([--with-ssl=DIR], [path to ssl]),
+        AS_HELP_STRING([--with-ssl=DIR], [path to ssl]),
         ssldirs="$withval")
     AC_CACHE_VAL(ac_cv_path_ssl,[
         for ssldir in $ssldirs; do
@@ -203,7 +203,7 @@ AC_DEFUN([CHECK_LIBMYSQL],
     AC_SUBST(MYSQLINC)
     MYSQLLIBS="-lmysqlclient";
     AC_SUBST(MYSQLLIBS)
-    MYSQLLDFLAGS="-L$ac_cv_path_mysql/lib/mysql -R$ac_cv_path_mysql/lib/mysql";
+    MYSQLLDFLAGS="";
     AC_SUBST(MYSQLLDFLAGS)
     AC_DEFINE(HAVE_MYSQL)
     AC_DEFINE(SQL_FRIEND)
@@ -253,7 +253,7 @@ AC_DEFUN([SET_ENABLE_SHARED],
 AC_DEFUN([CHECK_UNIVERSAL_BINARIES],
 [
     AC_ARG_ENABLE(universal_binaries,
-        AC_HELP_STRING([--enable-universal-binaries], [build universal binaries (default=no)]),
+        AS_HELP_STRING([--enable-universal-binaries], [build universal binaries (default=no)]),
         ,[enable_universal_binaries=no])
     if test "${enable_universal_binaries}" = "yes"; then
         case "${host_os}" in
