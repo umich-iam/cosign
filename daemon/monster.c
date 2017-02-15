@@ -500,6 +500,10 @@ do_dir( char *dir, struct connlist *head, struct timeval *now )
 		syslog( LOG_ERR, "eat_cookie failure: %s", path );
 		continue;
 	    }
+	    if ( rc == 0 ) {
+		/* Cookie was deleted, so don't sync */
+		continue;
+	    }
 	    for ( yacur = head; yacur != NULL; yacur = yacur->cl_next ) {
 		if (( itime > yacur->cl_last_time ) &&
 			( yacur->cl_sn != NULL )) {
