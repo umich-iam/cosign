@@ -87,7 +87,7 @@ cosign_create_config( apr_pool_t *p )
     cfg->noappendport = -1;
     cfg->proxy = -1;
     cfg->expiretime = 86400; /* 24 hours */
-    cfg->httponly_cookies = 0;
+    cfg->httponly_cookies = 1;
 #ifdef KRB
     cfg->krbtkt = -1;
 #ifdef GSS

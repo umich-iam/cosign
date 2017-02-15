@@ -49,7 +49,7 @@ char		*cadir = _COSIGN_TLS_CADIR;
 char		*tmpldir = _COSIGN_TMPL_DIR;
 char		*loop_page = _COSIGN_LOOP_URL;
 int		krbtkts = 0;
-int		httponly_cookies = 0;
+int		httponly_cookies = 1;
 SSL_CTX 	*ctx = NULL;
 
 char			*nfactorv[ COSIGN_MAXFACTORS ];
@@ -198,7 +198,13 @@ kcgi_configure()
     if (( val = cosign_config_get( COSIGNHTTPONLYCOOKIESKEY )) != NULL ) {
 	if ( strcasecmp( val, "on" ) == 0 ) {
 	    httponly_cookies = 1;
-	}
+        } else if ( strcasecmp( val, "off" ) == 0 ) {
+            httponly_cookies = 0;
+        } else {
+            fprintf( stderr, "%s: invalid setting for cosignhttponlycookies:"
+                    " defaulting on.\n", val );
+            httponly_cookies = 1;
+        }
     }
 }
 
