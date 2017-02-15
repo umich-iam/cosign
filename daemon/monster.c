@@ -33,7 +33,7 @@
 
 /* idle_cache = (grey+idle) from cosignd, plus loggedout_cache here */
 int		idle_cache = (60 * 30) +  (60 * 60 * 2) + (60 * 60 * 2);
-int		interval = 60 * 2;
+int		interval = 0;
 int		hard_timeout = 60 * 60 * 12;
 int		loggedout_cache = 60 * 60 * 2;
 int             debug = 0;
@@ -410,11 +410,17 @@ next:
 
     switch ( hashlen ) {
     case 0 :
+        if ( interval == 0 ) {
+            sleep(120);
+        }
 	do_dir( ".", head, &now );
 	break;
     
     case 1 :
 	for ( p = sixtyfourchars; *p != '\0'; p++ ) {
+            if ( interval == 0 ) {
+                sleep(2);
+            }
 	    hashdir[ 0 ] = *p;
 	    hashdir[ 1 ] = '\0';
 	    do_dir( hashdir, head, &now );
@@ -423,6 +429,9 @@ next:
 
     case 2 :
 	for ( p = sixtyfourchars; *p != '\0'; p++ ) {
+            if ( interval == 0 ) {
+                sleep(2);
+            }
 	    for ( q = sixtyfourchars; *q != '\0'; q++ ) {
 		hashdir[ 0 ] = *p;
 		hashdir[ 1 ] = *q;
