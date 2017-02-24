@@ -166,6 +166,9 @@ Apache Configuration Options:
 	    that need GSSAPI/Kerberos work. e.g. IMP running under mod_php
 	CosignGetProxyCookies	[ on | off ]
 	    module asks for proxy cookies from cosignd
+	CosignHttpOnlyCookies	[ on | off ]
+	    enable or disable "httponly" flag, which prevents JavaScript
+	    from accessing the Cosign cookie. Defaults to ON.
 
 	Cosign 3.0 introduces the validation handler URL for services,
 	allowing services to be more restrictive about redirections and

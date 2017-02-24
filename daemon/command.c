@@ -653,17 +653,18 @@ f_time( SNET *sn, int ac, char *av[], SNET *pushersn )
 	    continue;
 	}
 
+	state = atoi( av[ 2 ] );
+	/* We only need to call do_logout if it isn't already flagged SGID */
+	if (( state == 0 ) && (( st.st_mode & S_ISGID ) == 0 )) {
+	    if ( do_logout( path ) < 0 ) {
+		syslog( LOG_ERR, "f_time: %s should be logged out!", path );
+	    }
+	}
+
 	timestamp = atoi( av[ 1 ] ); 
 	if ( timestamp > st.st_mtime ) {
 	    new_time.modtime = timestamp;
 	    utime( path, &new_time );
-	}
-
-	state = atoi( av[ 2 ] );
-	if (( state == 0 ) && (( st.st_mode & S_ISGID ) != 0 )) {
-	    if ( do_logout( path ) < 0 ) {
-		syslog( LOG_ERR, "f_time: %s should be logged out!", path );
-	    }
 	}
     }
 
