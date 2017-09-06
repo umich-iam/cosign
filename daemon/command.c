@@ -200,7 +200,6 @@ f_starttls( SNET *sn, int ac, char *av[], SNET *pushersn )
 
     X509_NAME_get_text_by_NID( X509_get_subject_name( peer ),
 		NID_commonName, buf, sizeof( buf ));
-    X509_free( peer );
     if (( al = authlist_find( buf )) == NULL ) {
 	syslog( LOG_ERR, "f_starttls: No access for %s", buf );
 	snet_writef( sn, "%d No access for %s\r\n", 401, buf );
@@ -210,11 +209,17 @@ f_starttls( SNET *sn, int ac, char *av[], SNET *pushersn )
     /* store CN for use with CHECK and RETR */
     if (( remote_cn = strdup( buf )) == NULL ) {
 	syslog( LOG_ERR, "f_starttls: strdup %s: %m", buf );
+        X509_free( peer );
 	return( -1 );
     }
 
-    syslog( LOG_INFO, "STARTTLS %s %d %s",
-	    inet_ntoa( cosign_sin.sin_addr ), protocol, buf );
+    /* Also log issuing CA */
+    X509_NAME_get_text_by_NID( X509_get_issuer_name( peer ),
+		NID_commonName, buf, sizeof( buf ));
+    X509_free( peer );
+
+    syslog( LOG_INFO, "STARTTLS %s %d %s (%s)",
+	    inet_ntoa( cosign_sin.sin_addr ), protocol, remote_cn, buf );
 
     commands = auth_commands;
     ncommands = sizeof( auth_commands ) / sizeof( auth_commands[ 0 ] );
@@ -653,17 +658,18 @@ f_time( SNET *sn, int ac, char *av[], SNET *pushersn )
 	    continue;
 	}
 
+	state = atoi( av[ 2 ] );
+	/* We only need to call do_logout if it isn't already flagged SGID */
+	if (( state == 0 ) && (( st.st_mode & S_ISGID ) == 0 )) {
+	    if ( do_logout( path ) < 0 ) {
+		syslog( LOG_ERR, "f_time: %s should be logged out!", path );
+	    }
+	}
+
 	timestamp = atoi( av[ 1 ] ); 
 	if ( timestamp > st.st_mtime ) {
 	    new_time.modtime = timestamp;
 	    utime( path, &new_time );
-	}
-
-	state = atoi( av[ 2 ] );
-	if (( state == 0 ) && (( st.st_mode & S_ISGID ) != 0 )) {
-	    if ( do_logout( path ) < 0 ) {
-		syslog( LOG_ERR, "f_time: %s should be logged out!", path );
-	    }
 	}
     }
 
