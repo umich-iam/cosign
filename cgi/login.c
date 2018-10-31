@@ -180,6 +180,7 @@ cosign_login_mysql( struct connlist *head, char *cosignname, char *id,
 	case '_':
 	case '-':
 	case '.':
+	case '+':
 	    continue;
 
 	default:
