@@ -456,8 +456,22 @@ f_login( SNET *sn, int ac, char *av[], SNET *pushersn )
     if (( !krb ) || ( already_krb )) {
 	snet_writef( sn, "%d LOGIN successful: Cookie Stored.\r\n", 200 );
 	if (( pushersn != NULL ) && ( !replicated )) {
-	    snet_writef( pushersn, "LOGIN %s %s %s %s\r\n",
+	    switch ( ac ) {
+	    case 7 :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s %s %s\r\n",
+		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ], av[ 5 ], av[ 6 ]);
+		break;
+
+	    case 6 :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s %s\r\n",
+		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ], av[ 5 ]);
+		break;
+
+	    default :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s\r\n",
 		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ]);
+	    }
+
 	}
 	if ( !replicated ) {
 	    syslog( LOG_INFO, "LOGIN %s %s %s", av[ 3 ], av [ 4 ], av [ 2 ] );
