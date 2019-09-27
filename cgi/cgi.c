@@ -590,6 +590,11 @@ main( int argc, char *argv[] )
 	goto loginscreen;
     }
 
+    /* Prevent garbage input */
+    if ( ! cgi_filter_url(cookie) ) {
+        goto loginscreen;
+    }
+
     len = strlen( cookie );
     if ( len < 120 || len > 1024 ) {
 	goto loginscreen;
@@ -820,14 +825,15 @@ main( int argc, char *argv[] )
 	exit( 0 );
     }
 
-    if ( cl[ CL_REF ].cl_data != NULL ) {
+    /* While only REF is really a URL, none of these should be using non-URL characters in practice */
+    if ( cl[ CL_REF ].cl_data != NULL && cgi_filter_url( cl[ CL_REF ].cl_data ) ) {
         ref = sp.sp_ref = sl[ SL_REF ].sl_data = cl[ CL_REF ].cl_data;
     }
-    if ( cl[ CL_SERVICE ].cl_data != NULL ) {
+    if ( cl[ CL_SERVICE ].cl_data != NULL && cgi_filter_url( cl[ CL_SERVICE ].cl_data ) ) {
 	service = sp.sp_service =
 		sl[ SL_SERVICE ].sl_data = cl[ CL_SERVICE ].cl_data;
     }
-    if ( cl[ CL_RFACTOR ].cl_data != NULL ) {
+    if ( cl[ CL_RFACTOR ].cl_data != NULL && cgi_filter_url( cl[ CL_RFACTOR ].cl_data ) ) {
 	rfactors = sp.sp_factor =
 		sl[ SL_RFACTOR ].sl_data = cl[ CL_RFACTOR ].cl_data;
     }

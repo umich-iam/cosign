@@ -45,9 +45,12 @@ int cgi_cl_print( struct cgi_list * );
 int mp_get_file( struct cgi_file *, CGIHANDLE *, char *, struct function * );
 int cgi_multipart(CGIHANDLE *, struct cgi_list *, char *, struct function * );
 char * cgi_unescape( char * );
+int cgi_filter_url( char * );
 int cgi_get( CGIHANDLE *, struct cgi_list * );
 int cgi_post( CGIHANDLE *, struct cgi_list * );
 
+// See RFC3986 for character list
+#define CGI_ALLOW_CHARS "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~%:/?#[]@!$&'()*+,;="
 #define CGI_BUFLEN      8192
 #define CGI_LINLEN      512
 #define CGI_IOVCNT      128
