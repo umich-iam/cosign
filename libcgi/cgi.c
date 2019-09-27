@@ -626,6 +626,16 @@ cgi_unescape( char *raw )
     return( unesc );
 }
 
+    int
+cgi_filter_url( char *input )
+{
+    if ( strspn( input, CGI_ALLOW_CHARS ) == strlen( input ) ) {
+      return( 1 );
+    }
+
+    return( 0 );
+}
+
 // should return cl == NULL if no line... check b4 first strtok!!!!!
     static int
 cgi_querystring( char *line, struct cgi_list *cl )

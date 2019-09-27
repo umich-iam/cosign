@@ -98,6 +98,10 @@ logout_url_check( char *url )
     char		error[ 1024 ];
     int			rc = -1;
 
+    if ( ! cgi_filter_url( url ) ) {
+        return( -1 );
+    }
+
     /* compile regex matching valid logout redirect URLs */
     if (( rc = regcomp( &logout_re, cosign_logout_re,
 			REG_EXTENDED | REG_ICASE | REG_NOSUB )) != 0 ) {
