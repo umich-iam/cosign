@@ -430,13 +430,33 @@ pusher( int cpipe, struct connlist *cur )
     }
 
     switch ( ac ) {
+    case 8 :
+	if (( strcasecmp( av[ 0 ], "login" )) != 0 ) {
+	    syslog( LOG_ERR, "pusherchild: %s: bad command", av[ 0 ] );
+	    exit( 1 );
+	}
+	snet_writef( cur->cl_sn, "LOGIN %s %s %s %s %s %s kerberos\r\n",
+	    av[ 1 ], av [ 2 ], av [ 3 ], av [ 4 ], av[ 5 ], av[ 6 ] );
+	krb = 1;
+	break;
+
+    case 7 :
+	if (( strcasecmp( av[ 0 ], "login" )) != 0 ) {
+	    syslog( LOG_ERR, "pusherchild: %s: bad command", av[ 0 ] );
+	    exit( 1 );
+	}
+	snet_writef( cur->cl_sn, "LOGIN %s %s %s %s %s %s\r\n",
+	    av[ 1 ], av [ 2 ], av [ 3 ], av [ 4 ], av[ 5 ], av[ 6 ] );
+	krb = 1;
+	break;
+
     case 6 :
 	if (( strcasecmp( av[ 0 ], "login" )) != 0 ) {
 	    syslog( LOG_ERR, "pusherchild: %s: bad command", av[ 0 ] );
 	    exit( 1 );
 	}
-	snet_writef( cur->cl_sn, "LOGIN %s %s %s %s kerberos\r\n",
-	    av[ 1 ], av [ 2 ], av [ 3 ], av [ 4 ] );
+	snet_writef( cur->cl_sn, "LOGIN %s %s %s %s %s\r\n",
+	    av[ 1 ], av [ 2 ], av [ 3 ], av [ 4 ], av[ 5 ] );
 	krb = 1;
 	break;
 

@@ -153,8 +153,6 @@ cosign_choose_conn( struct connlist *head, void *netparams,
     }
 
     if ( retry ) {
-	fprintf( stderr,
-		"cosign_choose_conn: some servers returned UNKNOWN\n");
     } else {
 	fprintf( stderr,
 		"cosign_choose_conn: all servers returned ERROR\n");

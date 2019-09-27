@@ -200,7 +200,6 @@ f_starttls( SNET *sn, int ac, char *av[], SNET *pushersn )
 
     X509_NAME_get_text_by_NID( X509_get_subject_name( peer ),
 		NID_commonName, buf, sizeof( buf ));
-    X509_free( peer );
     if (( al = authlist_find( buf )) == NULL ) {
 	syslog( LOG_ERR, "f_starttls: No access for %s", buf );
 	snet_writef( sn, "%d No access for %s\r\n", 401, buf );
@@ -210,11 +209,17 @@ f_starttls( SNET *sn, int ac, char *av[], SNET *pushersn )
     /* store CN for use with CHECK and RETR */
     if (( remote_cn = strdup( buf )) == NULL ) {
 	syslog( LOG_ERR, "f_starttls: strdup %s: %m", buf );
+        X509_free( peer );
 	return( -1 );
     }
 
-    syslog( LOG_INFO, "STARTTLS %s %d %s",
-	    inet_ntoa( cosign_sin.sin_addr ), protocol, buf );
+    /* Also log issuing CA */
+    X509_NAME_get_text_by_NID( X509_get_issuer_name( peer ),
+		NID_commonName, buf, sizeof( buf ));
+    X509_free( peer );
+
+    syslog( LOG_INFO, "STARTTLS %s %d %s (%s)",
+	    inet_ntoa( cosign_sin.sin_addr ), protocol, remote_cn, buf );
 
     commands = auth_commands;
     ncommands = sizeof( auth_commands ) / sizeof( auth_commands[ 0 ] );
@@ -451,8 +456,22 @@ f_login( SNET *sn, int ac, char *av[], SNET *pushersn )
     if (( !krb ) || ( already_krb )) {
 	snet_writef( sn, "%d LOGIN successful: Cookie Stored.\r\n", 200 );
 	if (( pushersn != NULL ) && ( !replicated )) {
-	    snet_writef( pushersn, "LOGIN %s %s %s %s\r\n",
+	    switch ( ac ) {
+	    case 7 :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s %s %s\r\n",
+		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ], av[ 5 ], av[ 6 ]);
+		break;
+
+	    case 6 :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s %s\r\n",
+		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ], av[ 5 ]);
+		break;
+
+	    default :
+	        snet_writef( pushersn, "LOGIN %s %s %s %s\r\n",
 		    av[ 1 ], av[ 2 ], av[ 3 ], av[ 4 ]);
+	    }
+
 	}
 	if ( !replicated ) {
 	    syslog( LOG_INFO, "LOGIN %s %s %s", av[ 3 ], av [ 4 ], av [ 2 ] );
