@@ -56,7 +56,11 @@ mod_cosign.la: ${SRC}
 #   install the DSO file into the Apache installation
 #   and activate it in the Apache configuration
 install: all
+ifdef LIBEXECDIR
 	$(APXS2) -i -a -S LIBEXECDIR=$(DESTDIR)$(LIBEXECDIR) -n 'cosign' mod_cosign.la
+else
+	$(APXS2) -i -a -n 'cosign' mod_cosign.la
+endif
 
 #   cleanup
 clean:
